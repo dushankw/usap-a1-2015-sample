@@ -69,6 +69,7 @@ brute() {
         # Stopping mechanism (120 sec == 2 min)
         ($SLEEP 120 ; $KILL -9 $PID) &
         
+        # Begin attack
         for element in "${!perm[@]}" ; do
             try=$(echo "${perm[$element]}" | sha256sum | awk {'print $1'})
             for key in "${!hashes[@]}" ; do
