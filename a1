@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+
+# Author: Dushan Karovich-Wynne
+# Email: e09962@rmit.edu.au
+# File: Assignment 1 Sample Solution, Unix System Administration (Semester 2, 2015)
+
+# Binaries
+CAT='/bin/cat'
+KILL='/bin/kill'
+SLEEP='/bin/sleep'
+AWK='/usr/bin/awk'
+SHA256SUM='/usr/bin/sha256sum'
+
+# Variables
+PID=$$
+dictpath='/usr/share/dict/linux.words'
+pwlist=(password password1 passsword2 password3 password4 password123 changeme changeit letmein abc123)
+declare -A hashes
+
+# Make sure dictionary exists
+[ ! -e "$dictpath" ] && echo "Dictionary file not found, exiting..." && exit 1
+dict=$($CAT $dictpath)
+
+# Input processing
+while read -r LINE ; do
+    key=$(echo "$LINE" | $AWK -F ':' '{print $1}')
+    val=$(echo "$LINE" | $AWK -F ':' '{print $2}')
+    hashes["$key"]=$val
+done
+
+# Guess common passwords
+commonGuess() {
+    if [ ${#hashes[@]} -gt 0 ] ; then
+        for key in "${!hashes[@]}" ; do
+            for word in "${pwlist[@]}" ; do
+                doWeContinue
+                try=$(echo "$word" | $SHA256SUM | $AWK '{print $1}')
+                if [ "$try" == "${hashes[${key}]}" ] ; then
+                    echo "Password Found: $key $word"
+                    unset hashes[$key]
+                fi
+            done
+        done
+    fi
+}
+
+# Dictionary attack
+dictAttack() {
+    if [ ${#hashes[@]} -gt 0 ] ; then
+        for word in $dict ; do
+            try=$(echo "$word" | $SHA256SUM | $AWK '{print $1}')
+            for key in "${!hashes[@]}" ; do
+                doWeContinue
+                if [ "$try" == "${hashes[${key}]}" ] ; then
+                    echo "Password Found: $key $word"
+                    unset hashes[$key]
+                fi
+            done
+        done
+    fi
+}
+
+# Brute force attack
+brute() {
+    if [ ${#hashes[@]} -gt 0 ] ; then
+        # Generate permutations 
+        perm=($(echo {a..z} {a..z}{a..z} {a..z}{a..z}{a..z} {a..z}{a..z}{a..z}{a..z}))
+        
+        # Stopping mechanism (120 sec == 2 min)
+        ($SLEEP 120 ; $KILL -9 $PID) &
+        
+        # Attack
+        for element in "${!perm[@]}" ; do
+            # Test value
+            try=$(echo "${perm[$element]}" | sha256sum | awk {'print $1'})
+            for key in "${!hashes[@]}" ; do
+                # Ensure we don't run over time 
+                doWeContinue 
+                if [ "$try" == "${hashes[${key}]}" ] ; then
+                    echo "Password Found: $key ${perm[$element]}"
+                    unset hashes[$key]
+                fi
+            done
+            # Stop runaways
+            sleep 0.1
+        done
+    fi
+}
+
+# Kill function (called if the input stack becomes empty before script finishes)
+doWeContinue() {
+    if [ ${#hashes[@]} -eq 0 ] ; then
+        echo "We are out of passwords, exiting..."
+        $KILL -9 $PID
+    fi
+}
+
+# Call functions
+commonGuess
+dictAttack
+brute
